@@ -89,12 +89,12 @@ UNKNOWN = 3
 
 
 def exit_status(x):
-    return {
-        0: 'OK',
-        1: 'WARNING',
-        2: 'CRITICAL',
-        3: 'UNKNOWN'
-    }.get(x, 'UNKNOWN')
+	return {
+		0: 'OK',
+		1: 'WARNING',
+		2: 'CRITICAL',
+		3: 'UNKNOWN'
+	}.get(x, 'UNKNOWN')
 
 
 ###############################################################
@@ -103,7 +103,7 @@ def exit_status(x):
 #
 ###############################################################
 def usage():
-    print """
+	print """
 \t-h --help\t\t\t- Prints out this help message.
 \t-v --version\t\t\t- Prints the version number.
 \t-H --host <ip_address>\t\t- IP address of the cisco stack.
@@ -113,7 +113,7 @@ def usage():
 \t   --snmp-protocol-version <#>\t- SNMP protocol version.
 \t-d --debug\t\t\t- Verbose mode for debugging.
 """
-    sys.exit(UNKNOWN)
+	sys.exit(UNKNOWN)
 
 
 ###############################################################
@@ -122,79 +122,79 @@ def usage():
 #
 ###############################################################
 def parse_args():
-    options = dict([
-        ("remote_ip", None),
-        ("community", None),
-        ("community-key", None),
-        ("community-file", None),
-        ("snmp-protocol-version", 1)
-    ])
-    try:
-        opts, args = getopt.getopt(sys.argv[1:],
-            "hvH:c:d",
-            ["help", "version", "host=",
-                "community=", "community-key=", "community-file=",
-                "snmp-protocol-version=", "debug"])
-    except getopt.GetoptError, err:
-        # print help information and exit:
-        print str(err)    # will print something like "option -a not recognized"
-        usage()
-    for o, a in opts:
-        if o in ("-h", "--help"):
-            usage()
-        elif o in ("-v", "--version"):
-            print "{0} plugin version {1}".format(__program_name__, __version__)
-            sys.exit(UNKNOWN)
-        elif o in ("-H", "--host"):
-            options['remote_ip'] = a
-        elif o in ("-c", "--community"):
-            options['community'] = a
-        elif o in ("--community-key"):
-            options["community-key"] = a
-        elif o in ("--community-file"):
-            options["community-file"] = a
-        elif o in ("--snmp-protocol-version"):
-            options["snmp-protocol-version"] = int(a)
-        elif o in ("-d", "--debug"):
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format='%(asctime)s - %(funcName)s - %(message)s'
-            )
-            logging.debug('*** Debug mode started ***')
-        else:
-            assert False, "unhandled option: " + o
-    
-    if(options["community-key"] or options["community-file"]):
-        if(options["community-key"] is None or options["community-file"] is None):
-            print("Neither or both of community-key and community-file must be provided.")
-            usage()
-        try:
-            # Based on http://stackoverflow.com/a/34518072/751158:
-            ignores = re.compile("^#|\s*\r?\n")
-            secrets = dict(line.strip().split("=", 1) for line in open(options["community-file"]) if not ignores.match(line))
-            options["community"] = secrets[options["community-key"]]
-        except:
-            traceback.print_exc()
-            sys.exit(UNKNOWN)
-    elif(options["community"] is None):
-        options["community"] = "Public"
-    
-    logging.debug('Printing initial variables')
-    logging.debug('remote_ip: {0}'.format(options['remote_ip']))
-    logging.debug('community: {0}'.format(options['community']))
-    logging.debug('snmp-protocol-version: {0}'.format(options['snmp-protocol-version']))
-    if options['remote_ip'] is None:
-        print "Requires host to check"
-        usage()
-    
-    snmp_kwargs = {
-        "DestHost" : options["remote_ip"],
-        "Version" : options["snmp-protocol-version"],
-        "Community" : options['community']
-    }
-    options["snmp_kwargs"] = snmp_kwargs
-    
-    return options
+	options = dict([
+		("remote_ip", None),
+		("community", None),
+		("community-key", None),
+		("community-file", None),
+		("snmp-protocol-version", 1)
+	])
+	try:
+		opts, args = getopt.getopt(sys.argv[1:],
+			"hvH:c:d",
+			["help", "version", "host=",
+				"community=", "community-key=", "community-file=",
+				"snmp-protocol-version=", "debug"])
+	except getopt.GetoptError, err:
+		# print help information and exit:
+		print str(err)    # will print something like "option -a not recognized"
+		usage()
+	for o, a in opts:
+		if o in ("-h", "--help"):
+			usage()
+		elif o in ("-v", "--version"):
+			print "{0} plugin version {1}".format(__program_name__, __version__)
+			sys.exit(UNKNOWN)
+		elif o in ("-H", "--host"):
+			options['remote_ip'] = a
+		elif o in ("-c", "--community"):
+			options['community'] = a
+		elif o in ("--community-key"):
+			options["community-key"] = a
+		elif o in ("--community-file"):
+			options["community-file"] = a
+		elif o in ("--snmp-protocol-version"):
+			options["snmp-protocol-version"] = int(a)
+		elif o in ("-d", "--debug"):
+			logging.basicConfig(
+				level=logging.DEBUG,
+				format='%(asctime)s - %(funcName)s - %(message)s'
+			)
+			logging.debug('*** Debug mode started ***')
+		else:
+			assert False, "unhandled option: " + o
+	
+	if(options["community-key"] or options["community-file"]):
+		if(options["community-key"] is None or options["community-file"] is None):
+			print("Neither or both of community-key and community-file must be provided.")
+			usage()
+		try:
+			# Based on http://stackoverflow.com/a/34518072/751158:
+			ignores = re.compile("^#|\s*\r?\n")
+			secrets = dict(line.strip().split("=", 1) for line in open(options["community-file"]) if not ignores.match(line))
+			options["community"] = secrets[options["community-key"]]
+		except:
+			traceback.print_exc()
+			sys.exit(UNKNOWN)
+	elif(options["community"] is None):
+		options["community"] = "Public"
+	
+	logging.debug('Printing initial variables')
+	logging.debug('remote_ip: {0}'.format(options['remote_ip']))
+	logging.debug('community: {0}'.format(options['community']))
+	logging.debug('snmp-protocol-version: {0}'.format(options['snmp-protocol-version']))
+	if options['remote_ip'] is None:
+		print "Requires host to check"
+		usage()
+	
+	snmp_kwargs = {
+		"DestHost" : options["remote_ip"],
+		"Version" : options["snmp-protocol-version"],
+		"Community" : options['community']
+	}
+	options["snmp_kwargs"] = snmp_kwargs
+	
+	return options
 
 
 ###############################################################
@@ -205,10 +205,10 @@ def parse_args():
 #
 ###############################################################
 def plugin_exit(exitcode, message=''):
-    logging.debug('Exiting with status {0}. Message: {1}'.format(exitcode, message))
-    status = exit_status(exitcode)
-    print '{0} {1} - {2}'.format(__program_name__, status, message)
-    sys.exit(exitcode)
+	logging.debug('Exiting with status {0}. Message: {1}'.format(exitcode, message))
+	status = exit_status(exitcode)
+	print '{0} {1} - {2}'.format(__program_name__, status, message)
+	sys.exit(exitcode)
 
 
 ###############################################################
@@ -237,28 +237,28 @@ def plugin_exit(exitcode, message=''):
 #
 ###############################################################
 def get_stack_info(options):
-    member_table = {}
-    stack_table_oid = netsnmp.VarList(netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.2.1.1.1'))
-    logging.debug('Walking stack table -- ')
-    netsnmp.snmpwalk(stack_table_oid, **options["snmp_kwargs"])
-    if not stack_table_oid:
-        plugin_exit(CRITICAL, 'Unable to retrieve SNMP stack table')
-    for member in stack_table_oid:
-        logging.debug('Member info: {0}'.format(member.print_str()))
-        a = {'number': member.val, 'index': member.tag.rsplit('.').pop()}
-        member_table[a['index']] = a
-    stack_status_oid = netsnmp.VarList(netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.2.1.1.6'))
-    logging.debug('Walking stack status -- ')
-    netsnmp.snmpwalk(stack_status_oid, **options["snmp_kwargs"])
-    if not stack_status_oid:
-        plugin_exit(CRITICAL, 'Unable to retrieve SNMP stack status')
-    for member in stack_status_oid:
-        logging.debug('Member info: {0}'.format(member.print_str()))
-        index = member.tag.rsplit('.').pop()
-        member_table[index]['status_num'] = member.val
-        member_table[index]['status'] = stack_state(member.val)
-    logging.debug('Stack info table to return: {0}'.format(member_table))
-    return member_table
+	member_table = {}
+	stack_table_oid = netsnmp.VarList(netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.2.1.1.1'))
+	logging.debug('Walking stack table -- ')
+	netsnmp.snmpwalk(stack_table_oid, **options["snmp_kwargs"])
+	if not stack_table_oid:
+		plugin_exit(CRITICAL, 'Unable to retrieve SNMP stack table')
+	for member in stack_table_oid:
+		logging.debug('Member info: {0}'.format(member.print_str()))
+		a = {'number': member.val, 'index': member.tag.rsplit('.').pop()}
+		member_table[a['index']] = a
+	stack_status_oid = netsnmp.VarList(netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.2.1.1.6'))
+	logging.debug('Walking stack status -- ')
+	netsnmp.snmpwalk(stack_status_oid, **options["snmp_kwargs"])
+	if not stack_status_oid:
+		plugin_exit(CRITICAL, 'Unable to retrieve SNMP stack status')
+	for member in stack_status_oid:
+		logging.debug('Member info: {0}'.format(member.print_str()))
+		index = member.tag.rsplit('.').pop()
+		member_table[index]['status_num'] = member.val
+		member_table[index]['status'] = stack_state(member.val)
+	logging.debug('Stack info table to return: {0}'.format(member_table))
+	return member_table
 
 
 # -- STACK STATES --
@@ -304,19 +304,19 @@ def get_stack_info(options):
 # removed - The switch is removed from the stack."
 
 def stack_state(x):
-    return {
-        '1': 'waiting',
-        '2': 'progressing',
-        '3': 'added',
-        '4': 'ready',
-        '5': 'sdmMismatch',
-        '6': 'verMismatch',
-        '7': 'featureMismatch',
-        '8': 'newMasterInit',
-        '9': 'provisioned',
-        '10': 'invalid',
-        '11': 'removed',
-    }.get(x, 'UNKNOWN')
+	return {
+		'1': 'waiting',
+		'2': 'progressing',
+		'3': 'added',
+		'4': 'ready',
+		'5': 'sdmMismatch',
+		'6': 'verMismatch',
+		'7': 'featureMismatch',
+		'8': 'newMasterInit',
+		'9': 'provisioned',
+		'10': 'invalid',
+		'11': 'removed',
+	}.get(x, 'UNKNOWN')
 
 
 ###############################################################
@@ -332,14 +332,14 @@ def stack_state(x):
 #
 ###############################################################
 def get_ring_status(options):
-    ring_status_oid = netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.1.3.0')
-    logging.debug('Getting stack ring redundancy status -- ')
-    netsnmp.snmpget(ring_status_oid, **options["snmp_kwargs"])
-    if not ring_status_oid:
-        plugin_exit(CRITICAL, 'Unable to retrieve SNMP ring status')
-    logging.debug('Ring status: {0}'.format(ring_status_oid.print_str()))
-    stack_ring_status = ring_status_oid.val
-    return stack_ring_status
+	ring_status_oid = netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.1.3.0')
+	logging.debug('Getting stack ring redundancy status -- ')
+	netsnmp.snmpget(ring_status_oid, **options["snmp_kwargs"])
+	if not ring_status_oid:
+		plugin_exit(CRITICAL, 'Unable to retrieve SNMP ring status')
+	logging.debug('Ring status: {0}'.format(ring_status_oid.print_str()))
+	stack_ring_status = ring_status_oid.val
+	return stack_ring_status
 
 
 ###############################################################
@@ -352,24 +352,24 @@ def get_ring_status(options):
 #
 ###############################################################
 def evaluate_results(stack, ring):
-    message = [str(len(stack)), " Members:: "]
-    result = OK
-    logging.debug('Checking each stack member')
-    for i, member in sorted(stack.iteritems()):
-        logging.debug('Member {0} is {1}'.format(member['number'], member['status']))
-        message.append("{0}: {1}, ".format(member['number'], member['status']))
-        if member['status_num'] is not '4':
-            result = CRITICAL
-            logging.debug('Status changed to CRITICAL')
-    if ring == '1':
-        message.append("Stack Ring is redundant")
-    else:
-        message.append("Stack Ring is non-redundant")
-        if result == OK:
-            result = WARNING
-            logging.debug('Status changed to WARNING')
-    message = ''.join(message)
-    return result, message
+	message = [str(len(stack)), " Members:: "]
+	result = OK
+	logging.debug('Checking each stack member')
+	for i, member in sorted(stack.iteritems()):
+		logging.debug('Member {0} is {1}'.format(member['number'], member['status']))
+		message.append("{0}: {1}, ".format(member['number'], member['status']))
+		if member['status_num'] is not '4':
+			result = CRITICAL
+			logging.debug('Status changed to CRITICAL')
+	if ring == '1':
+		message.append("Stack Ring is redundant")
+	else:
+		message.append("Stack Ring is non-redundant")
+		if result == OK:
+			result = WARNING
+			logging.debug('Status changed to WARNING')
+	message = ''.join(message)
+	return result, message
 
 
 ###############################################################
@@ -378,12 +378,12 @@ def evaluate_results(stack, ring):
 #
 ###############################################################
 def main():
-    options = parse_args()
-    stack = get_stack_info(options)
-    ring = get_ring_status(options)
-    result, message = evaluate_results(stack, ring)
-    plugin_exit(result, message)
+	options = parse_args()
+	stack = get_stack_info(options)
+	ring = get_ring_status(options)
+	result, message = evaluate_results(stack, ring)
+	plugin_exit(result, message)
 
 
 if __name__ == "__main__":
-    main()
+	main()
