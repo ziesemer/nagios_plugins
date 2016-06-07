@@ -38,6 +38,7 @@
 #                   Return an exit status code of 3/UNKNOWN if -v / --version is used.
 #                   Update standard output to show # of members,
 #                   and to show members in sorted order.
+#                   Allow supplying SNMP community string from keyed file.
 #                   (ziesemer)
 #
 # ======================= LICENSE =============================
@@ -64,10 +65,12 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # ###############################################################
-import netsnmp   # Requires net-snmp compiled with python bindings
-import sys       # exit
 import getopt    # for parsing options
 import logging   # for debug option
+import netsnmp   # Requires net-snmp compiled with python bindings
+import re        # for reading key=value files.
+import sys       # exit
+import traceback # for error handling
 
 # Global program variables
 __program_name__ = 'Cisco Stack'
@@ -101,12 +104,14 @@ def exit_status(x):
 ###############################################################
 def usage():
     print """
-\t-h --help\t\t\t- Prints out this help message
-\t-v --version\t\t\t- Prints the version number
-\t-H --host <ip_address>\t\t- IP address of the cisco stack
-\t-c --community <string>\t\t- SNMP community string
-\t   --snmp-protocol-version <#>\t- SNMP protocol version
-\t-d --debug\t\t\t- Verbose mode for debugging
+\t-h --help\t\t\t- Prints out this help message.
+\t-v --version\t\t\t- Prints the version number.
+\t-H --host <ip_address>\t\t- IP address of the cisco stack.
+\t-c --community <string>\t\t- SNMP community string.
+\t   --community-key <key>\t- Key of key=value pair to read SNMP community string from in file.
+\t   --community-file <file>\t- File to read SNMP community string from.
+\t   --snmp-protocol-version <#>\t- SNMP protocol version.
+\t-d --debug\t\t\t- Verbose mode for debugging.
 """
     sys.exit(UNKNOWN)
 
@@ -119,11 +124,17 @@ def usage():
 def parse_args():
     options = dict([
         ("remote_ip", None),
-        ("community", "Public"),
+        ("community", None),
+        ("community-key", None),
+        ("community-file", None),
         ("snmp-protocol-version", 1)
     ])
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hvH:c:d", ["help", "version", "host=", "community=", "snmp-protocol-version=", "debug"])
+        opts, args = getopt.getopt(sys.argv[1:],
+            "hvH:c:d",
+            ["help", "version", "host=",
+                "community=", "community-key=", "community-file=",
+                "snmp-protocol-version=", "debug"])
     except getopt.GetoptError, err:
         # print help information and exit:
         print str(err)    # will print something like "option -a not recognized"
@@ -138,6 +149,10 @@ def parse_args():
             options['remote_ip'] = a
         elif o in ("-c", "--community"):
             options['community'] = a
+        elif o in ("--community-key"):
+            options["community-key"] = a
+        elif o in ("--community-file"):
+            options["community-file"] = a
         elif o in ("--snmp-protocol-version"):
             options["snmp-protocol-version"] = int(a)
         elif o in ("-d", "--debug"):
@@ -147,7 +162,23 @@ def parse_args():
             )
             logging.debug('*** Debug mode started ***')
         else:
-            assert False, "unhandled option"
+            assert False, "unhandled option: " + o
+    
+    if(options["community-key"] or options["community-file"]):
+        if(options["community-key"] is None or options["community-file"] is None):
+            print("Neither or both of community-key and community-file must be provided.")
+            usage()
+        try:
+            # Based on http://stackoverflow.com/a/34518072/751158:
+            ignores = re.compile("^#|\s*\r?\n")
+            secrets = dict(line.strip().split("=", 1) for line in open(options["community-file"]) if not ignores.match(line))
+            options["community"] = secrets[options["community-key"]]
+        except:
+            traceback.print_exc()
+            sys.exit(UNKNOWN)
+    elif(options["community"] is None):
+        options["community"] = "Public"
+    
     logging.debug('Printing initial variables')
     logging.debug('remote_ip: {0}'.format(options['remote_ip']))
     logging.debug('community: {0}'.format(options['community']))
