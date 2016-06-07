@@ -27,6 +27,14 @@ Define a service for the stack
           check_command check_cisco_stack! -H <ip address> -c <community>
         }
 
+Sample output:
+
+        Cisco Stack OK - 5 Members:: 1: ready, 2: ready, 3: ready, 4: ready, 5: ready, Stack Ring is redundant
+
+or in VSS mode:
+
+        Cisco Stack OK - VSSwitchMode: multiNode, cvsSwitchConvertingStatus: false. VSL:: 102: UP (2/2), 103: UP (2/2). Chassis:: 2: active, up 111 days, 3:19:03, 3: standby, up 111 days, 3:19:03. 
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/wershlak/nagios_plugins.
