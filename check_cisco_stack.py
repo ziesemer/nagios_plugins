@@ -32,9 +32,10 @@
 # Fixed: 12.2(25)SEE3, 12.2(35)SE (and Later)
 #
 # ========================= NOTES =============================
-# 11-27-2015: Version 1.0 released (Moving to PROD)
-# 12-04-2015: Now marking all states other than "ready" as critical
-# TODO: Add SNMP version 2 support
+# 2015-11-27: Version 1.0 released (Moving to PROD)
+# 2015-12-04 - 1.1: Now marking all states other than "ready" as critical
+# 2015-06-06 - 1.2: Add SNMP version 2 support.
+#                   (ziesemer)
 #
 # ======================= LICENSE =============================
 #
@@ -67,7 +68,7 @@ import logging   # for debug option
 
 # Global program variables
 __program_name__ = 'Cisco Stack'
-__version__ = 1.1
+__version__ = 1.2
 
 
 ###############################################################
@@ -97,11 +98,12 @@ def exit_status(x):
 ###############################################################
 def usage():
     print """
-\t-h --help\t\t- Prints out this help message
-\t-v --version\t\t- Prints the version number
-\t-H --host <ip_address>\t- IP address of the cisco stack
-\t-c --community <string>\t- SNMP community string
-\t-d --debug\t\t- Verbose mode for debugging
+\t-h --help\t\t\t- Prints out this help message
+\t-v --version\t\t\t- Prints the version number
+\t-H --host <ip_address>\t\t- IP address of the cisco stack
+\t-c --community <string>\t\t- SNMP community string
+\t   --snmp-protocol-version <#>\t- SNMP protocol version
+\t-d --debug\t\t\t- Verbose mode for debugging
 """
     sys.exit(UNKNOWN)
 
@@ -113,39 +115,51 @@ def usage():
 ###############################################################
 def parse_args():
     options = dict([
-        ('remote_ip', None),
-        ('community', 'Public')
+        ("remote_ip", None),
+        ("community", "Public"),
+        ("snmp-protocol-version", 1)
     ])
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hvH:c:d", ["help", "host=", "version", "community=", "debug"])
+        opts, args = getopt.getopt(sys.argv[1:], "hvH:c:d", ["help", "version", "host=", "community=", "snmp-protocol-version=", "debug"])
     except getopt.GetoptError, err:
         # print help information and exit:
         print str(err)    # will print something like "option -a not recognized"
         usage()
     for o, a in opts:
-        if o in ("-d", "--debug"):
+        if o in ("-h", "--help"):
+            usage()
+        elif o in ("-v", "--version"):
+            print "{0} plugin version {1}".format(__program_name__, __version__)
+            sys.exit(0)
+        elif o in ("-H", "--host"):
+            options['remote_ip'] = a
+        elif o in ("-c", "--community"):
+            options['community'] = a
+        elif o in ("--snmp-protocol-version"):
+            options["snmp-protocol-version"] = int(a)
+        elif o in ("-d", "--debug"):
             logging.basicConfig(
                 level=logging.DEBUG,
                 format='%(asctime)s - %(funcName)s - %(message)s'
             )
             logging.debug('*** Debug mode started ***')
-        elif o in ("-v", "--version"):
-            print "{0} plugin version {1}".format(__program_name__, __version__)
-            sys.exit(0)
-        elif o in ("-h", "--help"):
-            usage()
-        elif o in ("-H", "--host"):
-            options['remote_ip'] = a
-        elif o in ("-c", "--community"):
-            options['community'] = a
         else:
             assert False, "unhandled option"
     logging.debug('Printing initial variables')
     logging.debug('remote_ip: {0}'.format(options['remote_ip']))
     logging.debug('community: {0}'.format(options['community']))
+    logging.debug('snmp-protocol-version: {0}'.format(options['snmp-protocol-version']))
     if options['remote_ip'] is None:
         print "Requires host to check"
         usage()
+    
+    snmp_kwargs = {
+        "DestHost" : options["remote_ip"],
+        "Version" : options["snmp-protocol-version"],
+        "Community" : options['community']
+    }
+    options["snmp_kwargs"] = snmp_kwargs
+    
     return options
 
 
@@ -188,11 +202,11 @@ def plugin_exit(exitcode, message=''):
 #   See stack_state() documentation for all states
 #
 ###############################################################
-def get_stack_info(remote_ip, community):
+def get_stack_info(options):
     member_table = {}
     stack_table_oid = netsnmp.VarList(netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.2.1.1.1'))
     logging.debug('Walking stack table -- ')
-    netsnmp.snmpwalk(stack_table_oid, DestHost=remote_ip, Version=1, Community=community)
+    netsnmp.snmpwalk(stack_table_oid, **options["snmp_kwargs"])
     if not stack_table_oid:
         plugin_exit(CRITICAL, 'Unable to retrieve SNMP stack table')
     for member in stack_table_oid:
@@ -201,7 +215,7 @@ def get_stack_info(remote_ip, community):
         member_table[a['index']] = a
     stack_status_oid = netsnmp.VarList(netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.2.1.1.6'))
     logging.debug('Walking stack status -- ')
-    netsnmp.snmpwalk(stack_status_oid, DestHost=remote_ip, Version=1, Community=community)
+    netsnmp.snmpwalk(stack_status_oid, **options["snmp_kwargs"])
     if not stack_status_oid:
         plugin_exit(CRITICAL, 'Unable to retrieve SNMP stack status')
     for member in stack_status_oid:
@@ -283,10 +297,10 @@ def stack_state(x):
 #   connected in such a way that it forms a redundant ring."
 #
 ###############################################################
-def get_ring_status(remote_ip, community):
+def get_ring_status(options):
     ring_status_oid = netsnmp.Varbind('.1.3.6.1.4.1.9.9.500.1.1.3.0')
     logging.debug('Getting stack ring redundancy status -- ')
-    netsnmp.snmpget(ring_status_oid, DestHost=remote_ip, Version=1, Community=community)
+    netsnmp.snmpget(ring_status_oid, **options["snmp_kwargs"])
     if not ring_status_oid:
         plugin_exit(CRITICAL, 'Unable to retrieve SNMP ring status')
     logging.debug('Ring status: {0}'.format(ring_status_oid.print_str()))
@@ -331,8 +345,8 @@ def evaluate_results(stack, ring):
 ###############################################################
 def main():
     options = parse_args()
-    stack = get_stack_info(options['remote_ip'], options['community'])
-    ring = get_ring_status(options['remote_ip'], options['community'])
+    stack = get_stack_info(options)
+    ring = get_ring_status(options)
     result, message = evaluate_results(stack, ring)
     plugin_exit(result, message)
 
