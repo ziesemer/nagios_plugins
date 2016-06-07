@@ -35,6 +35,7 @@
 # 2015-11-27: Version 1.0 released (Moving to PROD)
 # 2015-12-04 - 1.1: Now marking all states other than "ready" as critical
 # 2015-06-06 - 1.2: Add SNMP version 2 support.
+#                   Return an exit status code of 3/UNKNOWN if -v / --version is used.
 #                   (ziesemer)
 #
 # ======================= LICENSE =============================
@@ -130,7 +131,7 @@ def parse_args():
             usage()
         elif o in ("-v", "--version"):
             print "{0} plugin version {1}".format(__program_name__, __version__)
-            sys.exit(0)
+            sys.exit(UNKNOWN)
         elif o in ("-H", "--host"):
             options['remote_ip'] = a
         elif o in ("-c", "--community"):
