@@ -36,6 +36,8 @@
 # 2015-12-04 - 1.1: Now marking all states other than "ready" as critical
 # 2015-06-06 - 1.2: Add SNMP version 2 support.
 #                   Return an exit status code of 3/UNKNOWN if -v / --version is used.
+#                   Update standard output to show # of members,
+#                   and to show members in sorted order.
 #                   (ziesemer)
 #
 # ======================= LICENSE =============================
@@ -319,10 +321,10 @@ def get_ring_status(options):
 #
 ###############################################################
 def evaluate_results(stack, ring):
-    message = ["Members: "]
+    message = [str(len(stack)), " Members:: "]
     result = OK
     logging.debug('Checking each stack member')
-    for i, member in stack.iteritems():
+    for i, member in sorted(stack.iteritems()):
         logging.debug('Member {0} is {1}'.format(member['number'], member['status']))
         message.append("{0}: {1}, ".format(member['number'], member['status']))
         if member['status_num'] is not '4':
