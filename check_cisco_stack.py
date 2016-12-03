@@ -42,6 +42,9 @@
 #                   Allow supplying SNMP community string from keyed file.
 #                   (ziesemer)
 # 2016-06-07 - 1.3: Add support for Cisco VSS (Virtual Switching System) mode.
+#                   (ziesemer)
+# 2016-12-03 - 1.4: Fix "zero length field name in format" error on Python 2.6.
+#                   (ziesemer)
 #
 # ======================= LICENSE =============================
 #
@@ -517,7 +520,7 @@ def oidToTable(oid):
 def main():
 	try:
 		options = parse_args()
-		result, message = getattr(sys.modules[__name__], "run_{}".format(options["mode"]))(options)
+		result, message = getattr(sys.modules[__name__], "run_{0}".format(options["mode"]))(options)
 	except SystemExit as e:
 		sys.exit(e)
 	except:
