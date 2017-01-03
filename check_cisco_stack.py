@@ -45,6 +45,10 @@
 #                   (ziesemer)
 # 2016-12-03 - 1.4: Fix "zero length field name in format" error on Python 2.6.
 #                   (ziesemer)
+# 2017-01-02 - 1.5-dev: Add option for setting expected size range of stack ring,
+#                   don't consider any stack ring status for expected 1-member stacks,
+#                   and otherwise return a warning if the expected size range is not matched.
+#                   (ziesemer)
 #
 # ======================= LICENSE =============================
 #
@@ -80,7 +84,7 @@ import traceback # for error handling
 
 # Global program variables
 __program_name__ = "Cisco Stack"
-__version__ = 1.3
+__version__ = "1.5-dev"
 
 ciscoMgmt = ".1.3.6.1.4.1.9.9"
 
@@ -94,6 +98,71 @@ WARNING = 1
 CRITICAL = 2
 UNKNOWN = 3
 
+class RangeValueError(ValueError):
+	pass
+
+# This is NOT the same as that described at
+# https://www.monitoring-plugins.org/doc/guidelines.html#THRESHOLDFORMAT ,
+# but is instead closer to
+# https://en.wikipedia.org/wiki/Interval_%28mathematics%29#Notations_for_intervals .
+class Range:
+	def __init__(self, rangeStr):
+		# "Float or Integer" (from Float)
+		def fi(num):
+			if(num.is_integer()):
+				return int(num)
+			return num
+		
+		parts = rangeStr.split(",")
+		partsLen = len(parts)
+		if(partsLen == 1):
+			start = end = fi(float(parts[0]))
+			compare = lambda x: x == self.start
+		elif(partsLen == 2):
+			start = parts[0]
+			if(len(start) == 0):
+				raise RangeValueError("No start notation.")
+			startN = start[0]
+			if(startN == '['):
+				startC = lambda x: self.start <= x
+			elif(startN == '('):
+				startC = lambda x: self.start < x
+			else:
+				raise RangeValueError("Unrecognized start notation: " + startN)
+			start = start[1:]
+			if(start == ''):
+				start = float("-inf")
+			else:
+				start = fi(float(start))
+			
+			end = parts[1]
+			endN = end[-1:]
+			if(endN == ']'):
+				endC = lambda x: x <= self.end
+			elif(endN == ')'):
+				endC = lambda x: x < self.end
+			else:
+				raise RangeValueError("Unrecognized end notation: " + endN)
+			end = end[:-1]
+			if(end == ''):
+				end = float("inf")
+			else:
+				end = fi(float(end))
+			
+			if(start > end):
+				raise RangeValueError("Invalid range (start > end): " + rangeStr)
+			
+			compare = lambda x: startC(x) and endC(x)
+		else:
+			raise RangeValueError("Invalid range: " + rangeStr)
+		
+		self.start = start
+		self.end = end
+		self.compare = compare
+		self.str = rangeStr
+		
+	def test(self, num):
+		return self.compare(num)
 
 def exit_status(x):
 	return {
@@ -119,6 +188,7 @@ def usage():
 \t   --community-file <file>\t- File to read SNMP community string from.
 \t   --snmp-protocol-version <#>\t- SNMP protocol version.
 \t-m --mode <mode>\t\t- Currently "stack" (default) or "vss".
+\t   --stack-size <interval>\t- Stack size to validate in math interval notation, default "[2,]".
 \t-d --debug\t\t\t- Verbose mode for debugging.
 """)
 	sys.exit(UNKNOWN)
@@ -136,14 +206,15 @@ def parse_args():
 		("community-key", None),
 		("community-file", None),
 		("snmp-protocol-version", 1),
-		("mode", "stack")
+		("mode", "stack"),
+		("stack-size", Range("[2,]"))
 	])
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
 			"hvH:c:m:d",
 			["help", "version", "host=",
 				"community=", "community-key=", "community-file=",
-				"mode=", "snmp-protocol-version=", "debug"])
+				"mode=", "stack-size=", "snmp-protocol-version=", "debug"])
 	except getopt.GetoptError, err:
 		# print help information and exit:
 		print(str(err))    # will print something like "option -a not recognized"
@@ -167,6 +238,8 @@ def parse_args():
 				print("Unrecognized mode: " + a)
 				usage()
 			options["mode"] = a
+		elif o in ("--stack-size"):
+			options["stack-size"] = Range(a)
 		elif o in ("--snmp-protocol-version"):
 			options["snmp-protocol-version"] = int(a)
 		elif o in ("-d", "--debug"):
@@ -372,7 +445,7 @@ def get_ring_status(options):
 # :return message: status message string for exit
 #
 ###############################################################
-def evaluate_stack_results(stack, ring):
+def evaluate_stack_results(stack, ring, options):
 	message = [str(len(stack)), " Members:: "]
 	result = OK
 	logging.debug("Checking each stack member")
@@ -382,20 +455,35 @@ def evaluate_stack_results(stack, ring):
 		if member["status_num"] is not "4":
 			result = CRITICAL
 			logging.debug("Status changed to CRITICAL")
-	if ring == "1":
-		message.append("Stack Ring is redundant")
+	
+	if(ring):
+		if ring == "1":
+			message.append("Stack Ring is redundant.")
+		else:
+			message.append("Stack Ring is non-redundant.")
+			if(result == OK):
+				result = WARNING
+				logging.debug("Status changed to WARNING")
 	else:
-		message.append("Stack Ring is non-redundant")
-		if result == OK:
+		message.append("not checking stack ring.")
+	
+	stackSizeRange = options["stack-size"]
+	if(not(stackSizeRange.test(len(stack)))):
+		message.append(" Stack size NOT within range: {0}.".format(stackSizeRange.str))
+		if(result == OK):
 			result = WARNING
 			logging.debug("Status changed to WARNING")
+	
 	message = "".join(message)
 	return result, message
 
 def run_stack(options):
 	stack = get_stack_info(options)
-	ring = get_ring_status(options)
-	return evaluate_stack_results(stack, ring)
+	if(len(stack) > 1):
+		ring = get_ring_status(options)
+	else:
+		ring = None
+	return evaluate_stack_results(stack, ring, options)
 
 def run_vss(options):
 	warning = False

@@ -6,5 +6,6 @@ doc/
 .DS_*
 .idea
 .secret
+*.pyc
 credentials.yml
 venv/
