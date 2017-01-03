@@ -45,9 +45,10 @@
 #                   (ziesemer)
 # 2016-12-03 - 1.4: Fix "zero length field name in format" error on Python 2.6.
 #                   (ziesemer)
-# 2017-01-02 - 1.5-dev: Add option for setting expected size range of stack ring,
+# 2017-01-02 - 1.5: Add option for setting expected size range of stack ring,
 #                   don't consider any stack ring status for expected 1-member stacks,
 #                   and otherwise return a warning if the expected size range is not matched.
+#                   Minor performance optimization for stack_state().
 #                   (ziesemer)
 #
 # ======================= LICENSE =============================
@@ -84,7 +85,7 @@ import traceback # for error handling
 
 # Global program variables
 __program_name__ = "Cisco Stack"
-__version__ = "1.5-dev"
+__version__ = "1.5"
 
 ciscoMgmt = ".1.3.6.1.4.1.9.9"
 
@@ -402,19 +403,21 @@ def get_stack_info(options):
 # removed - The switch is removed from the stack."
 
 def stack_state(x):
-	return {
-		1: "waiting",
-		2: "progressing",
-		3: "added",
-		4: "ready",
-		5: "sdmMismatch",
-		6: "verMismatch",
-		7: "featureMismatch",
-		8: "newMasterInit",
-		9: "provisioned",
-		10: "invalid",
-		11: "removed",
-	}.get(x, "UNKNOWN")
+	return stackStates.get(x, "UNKNOWN")
+
+stackStates = {
+	1: "waiting",
+	2: "progressing",
+	3: "added",
+	4: "ready",
+	5: "sdmMismatch",
+	6: "verMismatch",
+	7: "featureMismatch",
+	8: "newMasterInit",
+	9: "provisioned",
+	10: "invalid",
+	11: "removed",
+}
 
 
 ###############################################################
