@@ -2,7 +2,8 @@
 ###############################################################
 #  ========================= INFO ==============================
 # NAME:         check_cisco_stack.py
-# AUTHOR:       Jeffrey Wolak
+# AUTHOR:       Jeffrey Wolak (wershlak), Mark A. Ziesemer (ziesemer)
+# WEBSITE:      https://github.com/ziesemer/wershlak-nagios_plugins
 # LICENSE:      MIT
 # ======================= SUMMARY ============================
 # Python rewrite of check_snmp_cisco_stack.pl
@@ -50,6 +51,11 @@
 #                   and otherwise return a warning if the expected size range is not matched.
 #                   Minor performance optimization for stack_state().
 #                   (ziesemer)
+# 2017-03-05 - 1.6: Add support for SNMPv3.
+#                   Print out all provided variables on debug.
+#                   Take note of deprecated command-line arguments!
+#                   Minor performance optimization through use of netsnmp.Session.
+#                   (ziesemer)
 #
 # ======================= LICENSE =============================
 #
@@ -85,9 +91,11 @@ import traceback # for error handling
 
 # Global program variables
 __program_name__ = "Cisco Stack"
-__version__ = "1.5"
+__version__ = "1.6"
 
 ciscoMgmt = ".1.3.6.1.4.1.9.9"
+
+snmp_kwargs_defaults = None
 
 ###############################################################
 #
@@ -164,7 +172,10 @@ class Range:
 		
 	def test(self, num):
 		return self.compare(num)
-
+	
+	def __repr__(self):
+		return '\'' + self.str + '\''
+	
 def exit_status(x):
 	return {
 		0: "OK",
@@ -183,17 +194,46 @@ def usage():
 	print("""
 \t-h --help\t\t\t- Prints out this help message.
 \t-v --version\t\t\t- Prints the version number.
-\t-H --host <ip_address>\t\t- IP address of the cisco stack.
-\t-c --community <string>\t\t- SNMP community string.
-\t   --community-key <key>\t- Key of key=value pair to read SNMP community string from in file.
-\t   --community-file <file>\t- File to read SNMP community string from.
-\t   --snmp-protocol-version <#>\t- SNMP protocol version.
+\t-H --host <ip_address>\t\t- IP address of the Cisco stack.  Shorthand for --snmp-DestHost.
 \t-m --mode <mode>\t\t- Currently "stack" (default) or "vss".
 \t   --stack-size <interval>\t- Stack size to validate in math interval notation, default "[2,]".
+\t   --snmp-<key> <value>\t\t- Key/value pairs of configuration values to be passed directly to the
+\t\t\t\t\t  netsnmp library.  Complete reference of available options are available at
+\t\thttps://net-snmp.svn.sourceforge.net/svnroot/net-snmp/trunk/net-snmp/python/README""")
+	
+	for k, v in sorted(snmp_kwargs_defaults.iteritems()):
+		if(v == ''):
+			v = '<value>'
+		print("\t   --snmp-{0} {1}".format(k, v))
+	
+	print("""\t   --community-file <file>\t- File to read SNMP community string from.
+\t   --community-key <key>\t- Key of key=value pair to read SNMP community string from in file.
+\t   --auth-file <file>\t\t- File to read SNMP auth secret from.
+\t   --auth-key <key>\t\t- Key of key=value pair to read SNMP auth secret from in file.
+\t   --priv-file <file>\t\t- File to read SNMP priv secret from.
+\t\t\t\t\t  Ommit to use the same file as --auth-file (and only read the file once).
+\t   --priv-key <key>\t\t- Key of key=value pair to read SNMP priv secret from in file.
 \t-d --debug\t\t\t- Verbose mode for debugging.
+\t-c --community <string>\t\t- DEPRECATED: SNMP community string.
+\t   --snmp-protocol-version <#>\t- DEPRECATED: SNMP protocol version.
 """)
 	sys.exit(UNKNOWN)
 
+def readSecret(keyParam, fileParam, snmpParam, options, snmp_kwargs, secrets=None):
+	if(options[keyParam] or options[fileParam]):
+		if(options[keyParam] is None or (options[fileParam] is None and secrets is None)):
+			print("Neither or both of {0} and {1} must be provided.".format(keyParam, fileParam))
+			usage()
+		try:
+			if((secrets is None) or (options[fileParam] is not None)):
+				# Based on http://stackoverflow.com/a/34518072/751158:
+				ignores = re.compile("^#|\s*\r?\n")
+				secrets = dict(line.strip().split("=", 1) for line in open(options[fileParam]) if not ignores.match(line))
+			snmp_kwargs[snmpParam] = secrets[options[keyParam]]
+			return secrets
+		except:
+			traceback.print_exc()
+			sys.exit(UNKNOWN)
 
 ###############################################################
 #
@@ -201,24 +241,45 @@ def usage():
 #
 ###############################################################
 def parse_args():
+	global snmp_kwargs_defaults
+
 	options = dict([
-		("remote_ip", None),
-		("community", None),
 		("community-key", None),
 		("community-file", None),
-		("snmp-protocol-version", 1),
+		("auth-key", None),
+		("auth-file", None),
+		("priv-key", None),
+		("priv-file", None),
 		("mode", "stack"),
 		("stack-size", Range("[2,]"))
 	])
+	
+	snmp_kwargs = {
+		"Version": 1,
+		"Community": "Public"
+	}
+	# This is a little bit of a hack to get valid options, along with default values and their types.
+	snmp_kwargs_defaults = netsnmp.client._parse_session_args(snmp_kwargs)
+	
+	snmp_kwargs_listopts = []
+	for k in snmp_kwargs_defaults.keys():
+		snmp_kwargs_listopts.append("snmp-" + k + "=")
+	
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],
 			"hvH:c:m:d",
 			["help", "version", "host=",
-				"community=", "community-key=", "community-file=",
-				"mode=", "stack-size=", "snmp-protocol-version=", "debug"])
+				"mode=", "stack-size=", "debug",
+				"community-file=", "community-key=",
+				"auth-file=", "auth-key=",
+				"priv-file=", "priv-key=",
+				# Below line is deprecated options.
+				"community=", "snmp-protocol-version="
+			]
+			+ snmp_kwargs_listopts)
 	except getopt.GetoptError, err:
 		# print help information and exit:
-		print(str(err))    # will print something like "option -a not recognized"
+		print(str(err)) # will print something like "option -a not recognized"
 		usage()
 	for o, a in opts:
 		if o in ("-h", "--help"):
@@ -227,13 +288,22 @@ def parse_args():
 			print("{0} plugin version {1}".format(__program_name__, __version__))
 			sys.exit(UNKNOWN)
 		elif o in ("-H", "--host"):
-			options["remote_ip"] = a
+			snmp_kwargs["DestHost"] = a
 		elif o in ("-c", "--community"):
-			options["community"] = a
-		elif o in ("--community-key"):
-			options["community-key"] = a
+			# Deprecated option.
+			snmp_kwargs["Community"] = a
 		elif o in ("--community-file"):
 			options["community-file"] = a
+		elif o in ("--community-key"):
+			options["community-key"] = a
+		elif o in ("--auth-file"):
+			options["auth-file"] = a
+		elif o in ("--auth-key"):
+			options["auth-key"] = a
+		elif o in ("--priv-file"):
+			options["priv-file"] = a
+		elif o in ("--priv-key"):
+			options["priv-key"] = a
 		elif o in ("-m", "--mode"):
 			if a not in ("stack", "vss"):
 				print("Unrecognized mode: " + a)
@@ -242,45 +312,35 @@ def parse_args():
 		elif o in ("--stack-size"):
 			options["stack-size"] = Range(a)
 		elif o in ("--snmp-protocol-version"):
-			options["snmp-protocol-version"] = int(a)
+			# Deprecated option.
+			snmp_kwargs["Version"] = int(a)
 		elif o in ("-d", "--debug"):
 			logging.basicConfig(
-				level=logging.DEBUG,
-				format="%(asctime)s - %(funcName)s - %(message)s"
+				level = logging.DEBUG,
+				format = "%(asctime)s - %(funcName)s - %(message)s"
 			)
 			logging.debug("*** Debug mode started ***")
+		elif o.startswith("--snmp-"):
+			o = o[7:]
+			if(type(snmp_kwargs_defaults[o]) is int):
+				a = int(a)
+			snmp_kwargs[o] = a
 		else:
 			assert False, "unhandled option: " + o
 	
-	if(options["community-key"] or options["community-file"]):
-		if(options["community-key"] is None or options["community-file"] is None):
-			print("Neither or both of community-key and community-file must be provided.")
-			usage()
-		try:
-			# Based on http://stackoverflow.com/a/34518072/751158:
-			ignores = re.compile("^#|\s*\r?\n")
-			secrets = dict(line.strip().split("=", 1) for line in open(options["community-file"]) if not ignores.match(line))
-			options["community"] = secrets[options["community-key"]]
-		except:
-			traceback.print_exc()
-			sys.exit(UNKNOWN)
-	elif(options["community"] is None):
-		options["community"] = "Public"
+	readSecret("community-key", "community-file", "Community", options, snmp_kwargs)
+	# Use same file for reading the priv-key as the auth-key, if not otherwise specified.
+	secrets = readSecret("auth-key", "auth-file", "AuthPass", options, snmp_kwargs)
+	readSecret("priv-key", "priv-file", "PrivPass", options, snmp_kwargs, secrets)
 	
-	logging.debug("Printing initial variables")
-	logging.debug("remote_ip: {0}".format(options["remote_ip"]))
-	logging.debug("community: {0}".format(options["community"]))
-	logging.debug("mode: {0}".format(options["mode"]))
-	logging.debug("snmp-protocol-version: {0}".format(options["snmp-protocol-version"]))
-	if options["remote_ip"] is None:
-		print("Requires host to check")
+	if(logging.getLogger().isEnabledFor(logging.DEBUG)):
+		logging.debug("Printing initial options variables: {0}".format(options))
+		logging.debug("Printing initial snmp_kwargs variables: {0}".format(snmp_kwargs))
+	
+	if("DestHost" not in snmp_kwargs):
+		print("Requires host to check!")
 		usage()
 	
-	snmp_kwargs = {
-		"DestHost" : options["remote_ip"],
-		"Version" : options["snmp-protocol-version"],
-		"Community" : options["community"]
-	}
 	options["snmp_kwargs"] = snmp_kwargs
 	
 	return options
@@ -302,15 +362,16 @@ def plugin_exit(exitcode, message=""):
 def ciscoSnmpWalk(options, oidSuffix, errSuffix):
 	logging.debug("Walking %s -- ", errSuffix)
 	oid = netsnmp.VarList(netsnmp.Varbind(ciscoMgmt + oidSuffix))
-	netsnmp.snmpwalk(oid, **options["snmp_kwargs"])
+	options["snmp_session"].walk(oid)
 	if not oid:
 		plugin_exit(CRITICAL, "Unable to retrieve SNMP " + errSuffix)
 	return oid
 
 def ciscoSnmpGet(options, oidSuffix, errSuffix):
 	logging.debug("Getting %s -- ", errSuffix)
-	oid = netsnmp.Varbind(ciscoMgmt + oidSuffix)
-	netsnmp.snmpget(oid, **options["snmp_kwargs"])
+	vars = netsnmp.VarList(netsnmp.Varbind(ciscoMgmt + oidSuffix))
+	options["snmp_session"].get(vars)
+	oid = vars[0]
 	if not oid:
 		plugin_exit(CRITICAL, "Unable to retrieve SNMP " + errSuffix)
 	return oid
@@ -318,8 +379,7 @@ def ciscoSnmpGet(options, oidSuffix, errSuffix):
 ###############################################################
 #
 # get_stack_info() - Acquire info about the stack status
-# :param remote_ip: IP address of the system
-# :param community: SNMP read community
+# :param options: Global options dict
 # :return member_table: dict of dict of stack status
 #
 # -- member_table example:
@@ -423,8 +483,7 @@ stackStates = {
 ###############################################################
 #
 # get_ring_status() - Acquire info about the stack status
-# :param remote_ip: IP address of the system
-# :param community: SNMP read community
+# :param options: Global options dict
 # :return stack_ring_status: status of the stack ring
 #
 # OID: 1.3.6.1.4.1.9.9.500.1.1.3
@@ -444,6 +503,7 @@ def get_ring_status(options):
 # evaluate_results() - Evaluate status of stack and ring
 # :param stack: stack info dict
 # :param ring: ring status
+# :param options: Global options dict
 # :return result: result for exit code
 # :return message: status message string for exit
 #
@@ -455,12 +515,12 @@ def evaluate_stack_results(stack, ring, options):
 	for i, member in sorted(stack.iteritems()):
 		logging.debug("Member {0} is {1}".format(member["number"], member["status"]))
 		message.append("{0}: {1}, ".format(member["number"], member["status"]))
-		if member["status_num"] is not "4":
+		if(member["status_num"] is not "4"):
 			result = CRITICAL
 			logging.debug("Status changed to CRITICAL")
 	
 	if(ring):
-		if ring == "1":
+		if(ring == "1"):
 			message.append("Stack Ring is redundant.")
 		else:
 			message.append("Stack Ring is non-redundant.")
@@ -611,6 +671,13 @@ def oidToTable(oid):
 def main():
 	try:
 		options = parse_args()
+		
+		# SNMP is almost exclusively connectionless UDP, so it's not like this will provide connection pooling.
+		# However, this should save some repeated memory allocations (otherwise a new session is implicitly
+		#   created for every netsnmp "static" method), validations, and help benefit from anything else
+		#   that the API and any future protocol enhancements may have to offer.
+		options["snmp_session"] = netsnmp.Session(**options["snmp_kwargs"])
+		
 		result, message = getattr(sys.modules[__name__], "run_{0}".format(options["mode"]))(options)
 	except SystemExit as e:
 		sys.exit(e)
@@ -620,5 +687,5 @@ def main():
 	plugin_exit(result, message)
 
 
-if __name__ == "__main__":
+if(__name__ == "__main__"):
 	main()
