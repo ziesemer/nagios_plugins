@@ -20,9 +20,9 @@ Full backwards compatibility with the forked version is currently maintained.
 ## Installation
 
 1. Ensure that the Python library `netsnmp` is installed.
- 1. For CentOS 7, `sudo yum install net-snmp-python`.
+	1. For CentOS 7, `sudo yum install net-snmp-python`.
 2. Copy scripts into the Nagios/Icinga plugin directory.
- 1. `check_cisco_stack.py` is all that is currently required for the Cisco Stack plugin.
+	1. `check_cisco_stack.py` is all that is currently required for the Cisco Stack plugin.
 
 ## Usage
 
