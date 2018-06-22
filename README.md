@@ -5,14 +5,14 @@ A fork of https://github.com/wershlak/nagios_plugins, focused on feature enhance
 Current enhancements include:
 * SNMP version 2(c) and 3 (SNMPv3) support.
 * Support of all SNMP parameters, as detailed at https://net-snmp.svn.sourceforge.net/svnroot/net-snmp/trunk/net-snmp/python/README.
- * Allows for any combination of SNMPv3 parameters.
- * Provides for setting of timeouts, retries, remote port, and all other current and future parameters.
- * Only connection-related options have been tested / are supported.  Some advanced options may cause the program to behave unexpectedly.
+	* Allows for any combination of SNMPv3 parameters.
+	* Provides for setting of timeouts, retries, remote port, and all other current and future parameters.
+	* Only connection-related options have been tested / are supported.  Some advanced options may cause the program to behave unexpectedly.
 * Support for Cisco VSS (Virtual Switching System) mode.
 * Option for setting expected size range of stack ring.
 * Show # of members in output, and show in sorted order.
 * Supplying of secrets / passwords (community string / AuthPass / PrivPass) from a keyed file (or files) for security.
- * See https://www.netmeister.org/blog/passing-passwords.html.
+	* See https://www.netmeister.org/blog/passing-passwords.html.
 * Minor performance optimizations.
 
 Full backwards compatibility with the forked version is currently maintained.
