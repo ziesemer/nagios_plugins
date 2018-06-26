@@ -277,7 +277,7 @@ def parse_args():
 				"community=", "snmp-protocol-version="
 			]
 			+ snmp_kwargs_listopts)
-	except getopt.GetoptError, err:
+	except getopt.GetoptError as err:
 		# print help information and exit:
 		print(str(err)) # will print something like "option -a not recognized"
 		usage()
@@ -427,40 +427,20 @@ def get_stack_info(options):
 # http://tools.cisco.com/Support/SNMP/do/BrowseOID.do?
 #   objectInput=1.3.6.1.4.1.9.9.500.1.2.1.1.6&translate=Translate&submitValue=SUBMIT
 #
-#
-# "The current state of a switch:
-#
-# waiting - Waiting for a limited time on other
-# switches in the stack to come online.
-#
-# progressing - Master election or mismatch checks in
-# progress.
-#
-# added - The switch is added to the stack.
-#
-# ready - The switch is operational.
-#
-# sdmMismatch - The SDM template configured on the master
-# is not supported by the new member.
-#
-# verMismatch - The operating system version running on the
-# master is different from the operating
-# system version running on this member.
-#
-# featureMismatch - Some of the features configured on the
-# master are not supported on this member.
-#
-# newMasterInit - Waiting for the new master to finish
-# initialization after master switchover
-# (Master Re-Init).
-#
-# provisioned - The switch is not an active member of the
-# stack.
-#
-# invalid - The switch's state machine is in an
-# invalid state.
-#
-# removed - The switch is removed from the stack."
+# The current state of a switch:
+# - waiting - Waiting for a limited time on other switches in the stack to come online.
+# - progressing - Master election or mismatch checks in progress.
+# - added - The switch is added to the stack.
+# - ready - The switch is operational.
+# - sdmMismatch - The SDM template configured on the master is not supported by the new member.
+# - verMismatch - The operating system version running on the master is different from the operating
+#     system version running on this member.
+# - featureMismatch - Some of the features configured on the master are not supported on this member.
+# - newMasterInit - Waiting for the new master to finish initialization after master switchover
+#     (Master Re-Init).
+# - provisioned - The switch is not an active member of the stack.
+# - invalid - The switch's state machine is in an invalid state.
+# - removed - The switch is removed from the stack.
 
 def stack_state(x):
 	return stackStates.get(x, "UNKNOWN")
