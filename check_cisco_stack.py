@@ -56,6 +56,9 @@
 #                   Take note of deprecated command-line arguments!
 #                   Minor performance optimization through use of netsnmp.Session.
 #                   (ziesemer)
+# 2018-06-28 - 1.7: Changes to use numeric OIDs only to isolate from issues with various MIBs being installed.
+#                   - Update logging format to include log entry severity, and add additional logging.
+#                   (ziesemer)
 #
 # ======================= LICENSE =============================
 #
@@ -256,7 +259,10 @@ def parse_args():
 	
 	snmp_kwargs = {
 		"Version": 1,
-		"Community": "Public"
+		"Community": "Public",
+		# UseNumeric is required to remain agnostic to installed MIBs, etc.
+		# - https://github.com/ziesemer/wershlak-nagios_plugins/issues/3
+		"UseNumeric": 1
 	}
 	# This is a little bit of a hack to get valid options, along with default values and their types.
 	snmp_kwargs_defaults = netsnmp.client._parse_session_args(snmp_kwargs)
@@ -317,7 +323,7 @@ def parse_args():
 		elif o in ("-d", "--debug"):
 			logging.basicConfig(
 				level = logging.DEBUG,
-				format = "%(asctime)s - %(funcName)s - %(message)s"
+				format = "%(asctime)s %(levelname)s %(funcName)s - %(message)s"
 			)
 			logging.debug("*** Debug mode started ***")
 		elif o.startswith("--snmp-"):
@@ -325,6 +331,9 @@ def parse_args():
 			if(type(snmp_kwargs_defaults[o]) is int):
 				a = int(a)
 			snmp_kwargs[o] = a
+			
+			if(o == "UseNumeric"):
+				logging.warning("This script requires that SNMP UseNumeric=1.")
 		else:
 			assert False, "unhandled option: " + o
 	
@@ -360,7 +369,7 @@ def plugin_exit(exitcode, message=""):
 	sys.exit(exitcode)
 
 def ciscoSnmpWalk(options, oidSuffix, errSuffix):
-	logging.debug("Walking %s -- ", errSuffix)
+	logging.debug("Walking %s...", errSuffix)
 	oid = netsnmp.VarList(netsnmp.Varbind(ciscoMgmt + oidSuffix))
 	options["snmp_session"].walk(oid)
 	if not oid:
@@ -368,7 +377,7 @@ def ciscoSnmpWalk(options, oidSuffix, errSuffix):
 	return oid
 
 def ciscoSnmpGet(options, oidSuffix, errSuffix):
-	logging.debug("Getting %s -- ", errSuffix)
+	logging.debug("Getting %s...", errSuffix)
 	vars = netsnmp.VarList(netsnmp.Varbind(ciscoMgmt + oidSuffix))
 	options["snmp_session"].get(vars)
 	oid = vars[0]
@@ -405,16 +414,17 @@ def get_stack_info(options):
 	
 	stack_table_oid = ciscoSnmpWalk(options, ".500.1.2.1.1.1", "stack table")
 	for member in stack_table_oid:
-		logging.debug("Member info: {0}".format(member.print_str()))
-		a = {"number": member.val, "index": member.tag.rsplit(".").pop()}
+		logging.debug("member: {0}".format(member.print_str()))
+		a = {"number": member.val, "index": member.iid}
 		member_table[a["index"]] = a
 	
 	stack_status_oid = ciscoSnmpWalk(options, ".500.1.2.1.1.6", "stack status")
 	for member in stack_status_oid:
-		logging.debug("Member info: {0}".format(member.print_str()))
-		index = member.tag.rsplit(".").pop()
+		logging.debug("member: {0}".format(member.print_str()))
+		index = member.iid
 		member_table[index]["status_num"] = member.val
 		member_table[index]["status"] = stack_state(int(member.val))
+	
 	logging.debug("Stack info table to return: {0}".format(member_table))
 	
 	return member_table
@@ -491,9 +501,9 @@ def get_ring_status(options):
 def evaluate_stack_results(stack, ring, options):
 	message = [str(len(stack)), " Members:: "]
 	result = OK
-	logging.debug("Checking each stack member")
+	logging.debug("Checking each stack member...")
 	for i, member in sorted(stack.iteritems()):
-		logging.debug("Member {0} is {1}".format(member["number"], member["status"]))
+		logging.debug("Member {0} is {1}.".format(member["number"], member["status"]))
 		message.append("{0}: {1}, ".format(member["number"], member["status"]))
 		if(member["status_num"] is not "4"):
 			result = CRITICAL
@@ -539,28 +549,38 @@ def run_vss(options):
 	
 	message.append("VSSwitchMode: ")
 	
-	vssVal = int(cvsSwitchModeOid.val)
+	vssVal = cvsSwitchModeOid.val
+	logging.debug("vssVal: %s", vssVal)
+	try:
+		vssVal = int(cvsSwitchModeOid.val)
+	except ValueError:
+		pass
 	if(vssVal == 1):
 		message.append("standalone (ERROR)")
 		critical = True
 	elif(vssVal == 2):
 		message.append("multiNode")
 	else:
-		message.append("UNKNOWN ({:d})".format(vssVal))
+		message.append("UNKNOWN ({0})".format(vssVal))
 		unknown = True
 	
 	cvsSwitchConvertingStatusOid = ciscoSnmpGet(options, ".388.1.1.5.0", "cvsSwitchConvertingStatus")
 	
 	message.append(", cvsSwitchConvertingStatus: ")
 	
-	vssConvertVal = int(cvsSwitchConvertingStatusOid.val)
+	vssConvertVal = cvsSwitchConvertingStatusOid.val
+	logging.debug("vssConvertVal: %s", vssConvertVal)
+	try:
+		vssConvertVal = int(vssConvertVal)
+	except ValueError:
+		pass
 	if(vssConvertVal == 1):
 		message.append("true (ERROR)")
 		critical = True
 	elif(vssConvertVal == 2):
 		message.append("false")
 	else:
-		message.append("UNKNOWN ({:d})".format(vssConvertVal))
+		message.append("UNKNOWN ({0})".format(vssConvertVal))
 		unknown = True
 	
 	cvsVSLConnectionEntryOid = ciscoSnmpWalk(options, ".388.1.3.1.1", "cvsVSLConnectionEntry")
@@ -635,12 +655,12 @@ def run_vss(options):
 	message = "".join(message)
 	return result, message
 
-oidTablePattern = re.compile(".*\.(\d+)\.(\d+)$")
 def oidToTable(oid):
 	tab = {}
 	for member in oid:
-		match = oidTablePattern.match(member.tag)
-		tab.setdefault(int(match.group(2)), {})[int(match.group(1))] = member.val
+		logging.debug("member: {0}".format(member.print_str()))
+		attr = int(member.tag.rsplit(".").pop())
+		tab.setdefault(int(member.iid), {})[attr] = member.val
 	return tab
 
 ###############################################################
